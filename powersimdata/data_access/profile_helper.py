@@ -1,10 +1,28 @@
-import os
-
 import fs
-import requests
 from tqdm.auto import tqdm
 
 from powersimdata.utility import server_setup
+
+
+def get_profile_fs():
+    return fs.open_fs("azblob://besciences@profiles")
+
+
+def download(bfs, path, dst_file):
+    size = bfs.getinfo(path, namespaces=["details"]).size
+    with bfs.openbin(path) as src_file:
+        read = src_file.read
+        write = dst_file.write
+        with tqdm(
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024,
+            miniters=1,
+            total=size,
+        ) as pbar:
+            for chunk in iter(lambda: read(4096) or None, None):
+                write(chunk)
+                pbar.update(len(chunk))
 
 
 def _get_profile_version(_fs, kind):
@@ -24,7 +42,7 @@ def get_profile_version_cloud(grid_model, kind):
     :param str kind: *'demand'*, *'hydro'*, *'solar'* or *'wind'*.
     :return: (*list*) -- available profile version.
     """
-    bfs = fs.open_fs("azblob://besciences@profiles").opendir(f"raw/{grid_model}")
+    bfs = get_profile_fs().opendir(f"raw/{grid_model}")
     return _get_profile_version(bfs, kind)
 
 
@@ -41,8 +59,6 @@ def get_profile_version_local(grid_model, kind):
 
 
 class ProfileHelper:
-    BASE_URL = "https://besciences.blob.core.windows.net/profiles"
-
     @staticmethod
     def get_file_components(scenario_info, field_name):
         """Get the file name and relative path for the given profile and
@@ -63,25 +79,10 @@ class ProfileHelper:
 
         :param str file_name: profile csv.
         :param tuple from_dir: tuple of path components.
-        :return: (*str*) -- path to downloaded file.
         """
         print(f"--> Downloading {file_name} from blob storage.")
-        url_path = "/".join(from_dir)
-        url = f"{ProfileHelper.BASE_URL}/{url_path}/{file_name}"
-        dest = os.path.join(server_setup.LOCAL_DIR, *from_dir, file_name)
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        resp = requests.get(url, stream=True)
-        content_length = int(resp.headers.get("content-length", 0))
-        with open(dest, "wb") as f:
-            with tqdm(
-                unit="B",
-                unit_scale=True,
-                unit_divisor=1024,
-                miniters=1,
-                total=content_length,
-            ) as pbar:
-                for chunk in resp.iter_content(chunk_size=4096):
-                    f.write(chunk)
-                    pbar.update(len(chunk))
-
-        return dest
+        dirpath = "/".join(from_dir)
+        lfs = fs.open_fs(server_setup.LOCAL_DIR).makedirs(dirpath, recreate=True)
+        bfs = get_profile_fs().opendir(dirpath)
+        with lfs.open(file_name, "wb") as f:
+            download(bfs, file_name, f)
