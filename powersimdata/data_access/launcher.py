@@ -1,4 +1,5 @@
 import importlib
+import os
 import posixpath
 import sys
 
@@ -38,6 +39,27 @@ def _check_solver(solver):
         raise ValueError(f"Invalid solver: options are {solvers}")
 
 
+def _check_julia_env(julia_env):
+    """Validate the specified Julia environment. Note that this only checks that a
+    Project.toml file exists in the specified path; this does not verify that the Julia
+    environment is compatible with the selected simulation engine.
+
+    :param str julia_env: The path to the Julia environment (i.e., the directory where
+        the desired Project.toml file is located).
+    :raises TypeError: if julia_env is not a str.
+    :raises ValueError: if a directory is provided that does not contain a Project.toml
+        file.
+    """
+    if julia_env is None:
+        return
+    if not isinstance(julia_env, str):
+        raise TypeError("julia_env must be a str")
+    if not os.path.exists(os.path.join(julia_env, "Project.toml")):
+        raise ValueError(
+            "The directory specified by julia_env does not include a Project.toml file."
+        )
+
+
 class Launcher:
     """Base class for interaction with simulation engine.
 
@@ -51,7 +73,7 @@ class Launcher:
     def scenario_id(self):
         return self.scenario.scenario_id
 
-    def _launch(self, threads=None, solver=None, extract_data=True):
+    def _launch(self, threads=None, solver=None, extract_data=True, julia_env=None):
         """Launches simulation on target environment
 
         :param int threads: the number of threads to be used. This defaults to None,
@@ -60,6 +82,9 @@ class Launcher:
             None, which translates to gurobi
         :param bool extract_data: whether the results of the simulation engine should
             automatically extracted after the simulation has run. This defaults to True.
+        :param str julia_env: The path to the Julia environment (i.e., the directory
+            where the desired Project.toml file is located). Defaults to None, which
+            means the system's Julia environment is used.
         :raises NotImplementedError: always - this must be implemented in a subclass
         """
         raise NotImplementedError
@@ -68,7 +93,9 @@ class Launcher:
         """Extracts simulation outputs {PG, PF, LMP, CONGU, CONGL} on server."""
         pass
 
-    def launch_simulation(self, threads=None, solver=None, extract_data=True):
+    def launch_simulation(
+        self, threads=None, solver=None, extract_data=True, julia_env=None
+    ):
         """Launches simulation on target environment
 
         :param int threads: the number of threads to be used. This defaults to None,
@@ -77,12 +104,16 @@ class Launcher:
             None, which translates to gurobi
         :param bool extract_data: whether the results of the simulation engine should
             automatically extracted after the simulation has run. This defaults to True.
+        :param str julia_env: The path to the Julia environment (i.e., the directory
+            where the desired Project.toml file is located). Defaults to None, which
+            means the system's Julia environment is used.
         :return: (*subprocess.Popen*) or (*dict*) - the process, if using ssh to server,
             otherwise a dict containing status information.
         """
         _check_threads(threads)
         _check_solver(solver)
-        return self._launch(threads, solver, extract_data)
+        _check_julia_env(julia_env)
+        return self._launch(threads, solver, extract_data, julia_env)
 
 
 class SSHLauncher(Launcher):
@@ -115,7 +146,7 @@ class SSHLauncher(Launcher):
         print("PID: %s" % process.pid)
         return process
 
-    def _launch(self, threads=None, solver=None, extract_data=True):
+    def _launch(self, threads=None, solver=None, extract_data=True, julia_env=None):
         """Launch simulation on server, via ssh.
 
         :param int threads: the number of threads to be used. This defaults to None,
@@ -124,6 +155,9 @@ class SSHLauncher(Launcher):
             None, which translates to gurobi
         :param bool extract_data: whether the results of the simulation engine should
             automatically extracted after the simulation has run. This defaults to True.
+        :param str julia_env: The path to the Julia environment (i.e., the directory
+            where the desired Project.toml file is located). Defaults to None, which
+            means the system's Julia environment is used.
         :raises TypeError: if extract_data is not a boolean
         :return: (*subprocess.Popen*) -- new process used to launch simulation.
         """
@@ -139,6 +173,9 @@ class SSHLauncher(Launcher):
             raise TypeError("extract_data must be a bool")
         if extract_data:
             extra_args.append("--extract-data")
+
+        if julia_env is not None:
+            extra_args.append("--julia-env " + julia_env)
 
         return self._run_script("call.py", extra_args=extra_args)
 
@@ -158,7 +195,7 @@ class SSHLauncher(Launcher):
 class HttpLauncher(Launcher):
     BASE_URL = f"http://{server_setup.SERVER_ADDRESS}:5000"
 
-    def _launch(self, threads=None, solver=None, extract_data=True):
+    def _launch(self, threads=None, solver=None, extract_data=True, julia_env=None):
         """Launch simulation in container via http call
 
         :param int threads: the number of threads to be used. This defaults to None,
@@ -166,6 +203,9 @@ class HttpLauncher(Launcher):
         :param str solver: the solver used for optimization. This defaults to
             None, which translates to gurobi
         :param bool extract_data: always True
+        :param str julia_env: The path to the Julia environment (i.e., the directory
+            where the desired Project.toml file is located). Defaults to None, which
+            means the system's Julia environment is used.
         :return: (*dict*) -- contains "output", "errors", "scenario_id", and "status"
             keys which map to stdout, stderr, and the respective scenario attributes
         """
@@ -174,6 +214,7 @@ class HttpLauncher(Launcher):
             "threads": threads,
             "solver": solver,
             "extract-data": int(extract_data),
+            "julia-env": julia_env,
         }
         resp = requests.post(url, params=params)
         if resp.status_code != 200:
@@ -210,7 +251,7 @@ class NativeLauncher(Launcher):
 
         super().__init__(scenario)
 
-    def _launch(self, threads=None, solver=None, extract_data=True):
+    def _launch(self, threads=None, solver=None, extract_data=True, julia_env=None):
         """Launch simulation by importing from REISE.jl
 
         :param int threads: the number of threads to be used. This defaults to None,
@@ -218,11 +259,14 @@ class NativeLauncher(Launcher):
         :param str solver: the solver used for optimization. This defaults to
             None, which translates to gurobi
         :param bool extract_data: always True
+        :param str julia_env: The path to the Julia environment (i.e., the directory
+            where the desired Project.toml file is located). Defaults to None, which
+            means the system's Julia environment is used.
         :return: (*dict*) -- contains "output", "errors", "scenario_id", and "status"
             keys which map to stdout, stderr, and the respective scenario attributes
         """
         return self.app.launch_simulation(
-            self.scenario_id, threads, solver, extract_data
+            self.scenario_id, threads, solver, extract_data, julia_env
         )
 
     def extract_simulation_output(self):

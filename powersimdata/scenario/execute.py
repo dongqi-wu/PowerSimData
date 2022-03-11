@@ -8,6 +8,7 @@ from powersimdata.input.input_data import InputData
 from powersimdata.input.transform_grid import TransformGrid
 from powersimdata.input.transform_profile import TransformProfile
 from powersimdata.scenario.ready import Ready
+from powersimdata.utility import server_setup
 from powersimdata.utility.config import get_deployment_mode
 
 
@@ -140,7 +141,9 @@ class Execute(Ready):
                 f"Status must be one of {valid_status}, but got status={self._scenario_status}"
             )
 
-    def launch_simulation(self, threads=None, solver=None, extract_data=True):
+    def launch_simulation(
+        self, threads=None, solver=None, extract_data=True, julia_env=None
+    ):
         """Launches simulation on target environment
 
         :param int/None threads: the number of threads to be used. This defaults to None,
@@ -149,6 +152,9 @@ class Execute(Ready):
             None, which translates to gurobi
         :param bool extract_data: whether the results of the simulation engine should
             automatically extracted after the simulation has run. This defaults to True.
+        :param str julia_env: The path to the Julia environment (i.e., the directory
+            where the desired Project.toml file is located). Defaults to None, which
+            means the system's Julia environment is used.
         :return: (*subprocess.Popen*) or (*dict*) - the process, if using ssh to server,
             otherwise a dict containing status information.
         """
@@ -156,7 +162,14 @@ class Execute(Ready):
 
         mode = get_deployment_mode()
         print(f"--> Launching simulation on {mode.lower()}")
-        return self._launcher.launch_simulation(threads, solver, extract_data)
+
+        # Set the appropriate Julia environment if the user has the Native set-up
+        if mode == "LOCAL" and julia_env is None:
+            julia_env = server_setup.ENGINE_DIR
+
+        return self._launcher.launch_simulation(
+            threads, solver, extract_data, julia_env
+        )
 
     def check_progress(self):
         """Get the status of an ongoing simulation, if possible
