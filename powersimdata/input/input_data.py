@@ -146,6 +146,18 @@ class InputData:
         with self.data_access.write(filepath) as f:
             pickle.dump(ct, f)
 
+    def get_electrified_demand(self, grid_model, kind, filename):
+        """Get the specified electrification profile
+
+        :param str grid_model: grid model.
+        :param str kind: *'building'* or *'transportation'*
+        :param str filename: the profile name in the form [end_use]_[tech]
+        :return: (*pandas.DataFrame*) -- the profile data frame
+        """
+        filepath = f"raw/{grid_model}/{kind}/{filename}.csv"
+        with self.data_access.get(filepath) as (f, path):
+            return _read(f, path)
+
 
 def distribute_demand_from_zones_to_buses(zone_demand, bus):
     """Decomposes zone demand to bus demand based on bus 'Pd' column.

@@ -18,8 +18,6 @@ def get_profile_version(_fs, grid_model, kind):
 
 
 class ProfileHelper:
-    BASE_URL = "https://besciences.blob.core.windows.net/profiles"
-
     @staticmethod
     def get_file_path(scenario_info, field_name):
         """Get the pyfilesystem path to the profile
