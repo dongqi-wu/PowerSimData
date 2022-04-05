@@ -30,16 +30,16 @@ _file_extension = {
 
 class InputHelper:
     @staticmethod
-    def get_file_components(scenario_info, field_name):
-        """Get the file name and relative path for either ct or grid.
+    def get_file_path(scenario_info, field_name):
+        """Get the pyfilesystem path for either ct or grid.
 
         :param dict scenario_info: metadata for a scenario.
         :param str field_name: the input file type.
-        :return: (*tuple*) -- file name and list of path components.
+        :return: (*str*) -- the filepath
         """
         ext = _file_extension[field_name]
         file_name = scenario_info["id"] + "_" + field_name + "." + ext
-        return file_name, server_setup.INPUT_DIR
+        return "/".join([*server_setup.INPUT_DIR, file_name])
 
 
 def _check_field(field_name):
@@ -114,9 +114,8 @@ class InputData:
         else:
             helper = InputHelper
 
-        file_name, from_dir = helper.get_file_components(scenario_info, field_name)
+        filepath = helper.get_file_path(scenario_info, field_name)
 
-        filepath = "/".join([*from_dir, file_name])
         key = cache_key(filepath)
         cached = _cache.get(key)
         if cached is not None:

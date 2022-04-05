@@ -21,13 +21,12 @@ class ProfileHelper:
     BASE_URL = "https://besciences.blob.core.windows.net/profiles"
 
     @staticmethod
-    def get_file_components(scenario_info, field_name):
-        """Get the file name and relative path for the given profile and
-        scenario.
+    def get_file_path(scenario_info, field_name):
+        """Get the pyfilesystem path to the profile
 
         :param dict scenario_info: metadata for a scenario.
         :param str field_name: the kind of profile.
-        :return: (*tuple*) -- file name and list of path components.
+        :return: (*str*) -- the filepath
         """
         if "demand_flexibility" in field_name:
             version = scenario_info[field_name]
@@ -35,4 +34,4 @@ class ProfileHelper:
             version = scenario_info["base_" + field_name]
         file_name = field_name + "_" + version + ".csv"
         grid_model = scenario_info["grid_model"]
-        return file_name, ("raw", grid_model)
+        return "/".join(["raw", grid_model, file_name])
