@@ -3,9 +3,9 @@ import os
 from powersimdata.data_access.context import Context
 from powersimdata.data_access.scenario_list import ScenarioListManager
 from powersimdata.input.scenario_grid import FromREISE, FromREISEjl
+from powersimdata.network.constants.storage import storage
 from powersimdata.network.hifld.model import HIFLD
 from powersimdata.network.model import ModelImmutables
-from powersimdata.network.usa_tamu.constants import storage as tamu_storage
 from powersimdata.network.usa_tamu.model import TAMU
 from powersimdata.utility.helpers import MemoryCache, cache_key
 
@@ -129,9 +129,10 @@ class Grid:
         _univ_eq(self.gencost["before"], other.gencost["before"], "gencost")
 
         # compare storage
+        print(self.storage)
         _univ_eq(len(self.storage["gen"]), len(other.storage["gen"]), "storage")
         _univ_eq(self.storage.keys(), other.storage.keys(), "storage")
-        ignored_subkeys = {"gencost"} | set(tamu_storage.defaults.keys())
+        ignored_subkeys = {"gencost"} | set(storage.keys())
         for subkey in set(self.storage.keys()) - ignored_subkeys:
             # REISE will modify some gen columns
             self_data = self.storage[subkey]
